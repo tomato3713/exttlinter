@@ -9,12 +9,12 @@ func Test_a(t *testing.T) {
 		t.Error("no match") // want "should not use external testing object."
 	}
 
-	assert2 := func(t *testing.T) {
+	assert2 := func(t *testing.T, a, b int) {
 		t.Error("no match")
 	}
 
 	t.Run("sub test", func(t *testing.T) {
 		assert1()
-		assert2(t)
+		assert2(t, 1, 2)
 	})
 }
