@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
-	"strings"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/buildssa"
@@ -25,7 +24,7 @@ var Analyzer = &analysis.Analyzer{
 	},
 }
 
-func run(pass *analysis.Pass) (any, error) {
+func lookupTestingObject(pass *analysis.Pass) (*types.Interface, error) {
 	var testingPkg *types.Package
 	for _, p := range pass.Pkg.Imports() {
 		if p.Path() == "testing" {
@@ -47,6 +46,28 @@ func run(pass *analysis.Pass) (any, error) {
 		return nil, fmt.Errorf("testing.TB is not an interface")
 	}
 
+	return tbIface, nil
+}
+
+func run(pass *analysis.Pass) (any, error) {
+	tbIface, err := lookupTestingObject(pass)
+	if err != nil {
+		return nil, err
+	}
+
+	isTestingObject := func(pass *analysis.Pass, ident *ast.Ident) (bool, error) {
+		obj := pass.TypesInfo.ObjectOf(ident)
+		if obj == nil {
+			return false, fmt.Errorf("object not found")
+		}
+
+		if types.Satisfies(obj.Type(), tbIface) {
+			return true, nil
+		}
+
+		return false, nil
+	}
+
 	inspect := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 
 	nodeFilter := []ast.Node{
@@ -56,6 +77,24 @@ func run(pass *analysis.Pass) (any, error) {
 	inspect.Preorder(nodeFilter, func(n ast.Node) {
 		switch n := n.(type) {
 		case *ast.FuncLit:
+			// memorize testing objects
+			tObjects := make(map[types.Object]struct{}, 0)
+			params := n.Type.Params.List
+			for _, p := range params {
+				for _, name := range p.Names {
+					isTesting, err := isTestingObject(pass, name)
+					if err != nil {
+						continue
+					}
+					obj := pass.TypesInfo.ObjectOf(name)
+					if isTesting {
+						tObjects[obj] = struct{}{}
+					}
+				}
+
+			}
+
+			// check if the testing object method called
 			body := n.Body.List
 			for _, stmt := range body {
 				exprStmt, ok := stmt.(*ast.ExprStmt)
@@ -78,14 +117,14 @@ func run(pass *analysis.Pass) (any, error) {
 					continue
 				}
 
-				obj := pass.TypesInfo.ObjectOf(ident)
-				if obj == nil {
-					pass.Reportf(ident.Pos(), "object is nil")
+				isTesting, err := isTestingObject(pass, ident)
+				if err != nil {
+					continue
 				}
-
-				if types.Satisfies(obj.Type(), tbIface) {
-					// TODO: check if the object is external scope testing object
-					pass.Reportf(ident.Pos(), fmt.Sprintf("should not use external testing object."))
+				if isTesting {
+					if _, ok := tObjects[pass.TypesInfo.ObjectOf(ident)]; !ok {
+						pass.Reportf(ident.Pos(), "should not use external testing object.")
+					}
 				}
 			}
 		}
