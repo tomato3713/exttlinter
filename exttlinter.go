@@ -55,13 +55,18 @@ func run(pass *analysis.Pass) (any, error) {
 		return nil, err
 	}
 
+	// no test file
+	if tbIface == nil {
+		return nil, nil
+	}
+
 	isTestingObject := func(pass *analysis.Pass, ident *ast.Ident) (bool, error) {
 		obj := pass.TypesInfo.ObjectOf(ident)
 		if obj == nil {
 			return false, fmt.Errorf("object not found")
 		}
 
-		if types.Satisfies(obj.Type(), tbIface) {
+		if types.Implements(obj.Type(), tbIface) {
 			return true, nil
 		}
 
