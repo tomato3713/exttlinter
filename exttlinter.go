@@ -128,7 +128,20 @@ func run(pass *analysis.Pass) (any, error) {
 				}
 				if isTesting {
 					if _, ok := tObjects[pass.TypesInfo.ObjectOf(ident)]; !ok {
-						pass.Reportf(ident.Pos(), "should not use external testing object.")
+						pass.Report(analysis.Diagnostic{
+							Pos:     ident.Pos(),
+							Message: "should not use external testing object.",
+							SuggestedFixes: []analysis.SuggestedFix{{
+								Message: "append t *testing.T args",
+								TextEdits: []analysis.TextEdit{{
+									Pos:     n.Type.Params.Opening + 1,
+									End:     n.Type.Params.Closing,
+									NewText: []byte("t *testing.T"),
+								}},
+							}},
+						})
+
+						// TODO: suggest: append t *testing.T args
 					}
 				}
 			}
