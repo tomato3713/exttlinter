@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/tomato3713/exttlinter"
-	"golang.org/x/tools/go/analysis/unitchecker"
+	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
-func main() { unitchecker.Main(exttlinter.Analyzer) }
+func main() { singlechecker.Main(exttlinter.Analyzer) }
